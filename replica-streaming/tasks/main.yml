@@ -1,0 +1,156 @@
+# (c) Copyright 2016 DataNexus Inc.  All Rights Reserved. 
+#
+# streaming tasks for the replica
+---
+#- set_fact: master_server={{ hostvars[inventory_hostname].groups.tag_Role_master[0] }}
+#  when: hostvars[inventory_hostname].groups.tag_Role_master[0] is defined
+
+- block:
+    - name: Preserve postgresql.conf
+      command: /bin/cp {{ postgresql_config_path }}/postgresql.conf /tmp
+      become_user: "{{ postgresql_user }}"
+    
+    - name: preserve CA cert
+      command: /bin/cp {{ postgresql_data_dir }}/ca-cert.pem /tmp
+      become_user: "{{ postgresql_user }}"
+
+    - name: preserve CA key
+      command: /bin/cp {{ postgresql_data_dir }}/ca-key.pem /tmp
+      become_user: "{{ postgresql_user }}"
+      
+    - name: Remove data directory in preparation for streaming
+      file:
+        path: "{{ postgresql_data_dir }}"  
+        state: absent
+
+    - name: Ensure PostgreSQL data directory exists.
+      file:
+        path: "{{ postgresql_data_dir }}"
+        owner: "{{ postgresql_user }}"
+        group: "{{ postgresql_group }}"
+        state: directory
+        mode: 0700
+    
+    - name: ensure PostgreSQL preferences directory exists
+      file:
+        path: "{{ postgresql_home_dir }}/.postgresql"
+        owner: "{{ postgresql_user }}"
+        group: "{{ postgresql_group }}"
+        state: directory
+        mode: 0700      
+    
+    - name: check if SSL keys exist
+      stat:
+        path: "{{ postgresql_home_dir }}/.postgresql/postgresql.key"
+      register: pghome_key 
+      
+    - name: create SSL certs and keys
+      command: /bin/openssl req -nodes -newkey rsa:2048 -keyout {{ postgresql_home_dir }}/.postgresql/postgresql.key -out {{ postgresql_home_dir }}/postgresql.csr -subj "/C=US/ST=CO/L=Denver/O=DataNexus/CN=replicator"
+      become_user: "{{ postgresql_user }}"
+      when: not pghome_key.stat.exists
+
+    - name: restoring CA cert
+      command: /bin/mv /tmp/ca-cert.pem {{ postgresql_home_dir }}/.postgresql/ca-cert.pem
+      become_user: "{{ postgresql_user }}"
+
+    - name: restoring CA key
+      command: /bin/mv /tmp/ca-key.pem /var/lib/pgsql/ca-key.pem
+      become_user: "{{ postgresql_user }}"
+        
+    - name: sign replica key
+      command: /bin/openssl x509 -req -in {{ postgresql_home_dir }}/postgresql.csr -CA "{{ postgresql_home_dir }}/.postgresql/ca-cert.pem" -CAkey /var/lib/pgsql/ca-key.pem -out {{ postgresql_home_dir }}/.postgresql/postgresql.crt -CAcreateserial
+      become_user: "{{ postgresql_user }}"
+
+    - name: ensure replica key permissions
+      file:
+        path: "{{ postgresql_home_dir }}/.postgresql/postgresql.key"
+        owner: "{{ postgresql_user }}"
+        group: "{{ postgresql_group }}"
+        mode: 0600
+      
+    - name: copy initial database
+      command: /bin/pg_basebackup -h {{ hostvars[item].ansible_eth1.ipv4.address }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
+      become_user: "{{ postgresql_user }}"
+      with_items: "{{ groups.postgresql_master }}"
+      when: cloud == "aws"
+      
+    - name: copy initial database
+      command: /bin/pg_basebackup -h {{ hostvars[item].osp_floating_ip }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
+      become_user: "{{ postgresql_user }}"
+      with_items: "{{ groups.postgresql_master }}"  
+      when: cloud == "osp"
+      
+    - name: Restore postgresql.conf
+      command: /bin/cp /tmp/postgresql.conf {{ postgresql_config_path }}
+      become_user: "{{ postgresql_user }}"
+   
+    - name: build recovery file
+      blockinfile:
+        name: "{{ postgresql_config_path }}/recovery.conf"
+        mode: 0600
+        create: yes
+        block: |
+          standby_mode = 'on'
+          primary_conninfo = 'host={{ hostvars[item].ansible_eth1.ipv4.address }} port=5432 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
+          trigger_file = '/tmp/postgresql.trigger'
+      become_user: "{{ postgresql_user }}"
+      with_items: "{{ groups.postgresql_master }}"
+      when: cloud == "aws"
+      
+    - name: build recovery file
+      blockinfile:
+        name: "{{ postgresql_config_path }}/recovery.conf"
+        mode: 0600
+        create: yes
+        block: |
+          standby_mode = 'on'
+          primary_conninfo = 'host={{ hostvars[item].osp_floating_ip }} port=5432 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
+          trigger_file = '/tmp/postgresql.trigger'
+      become_user: "{{ postgresql_user }}"
+      with_items: "{{ groups.postgresql_master }}"
+      when: cloud == "osp"
+      
+    - name: Fix SE Linux labels on {{ postgresql_data_dir }}
+      command: /usr/sbin/fixfiles -F restore "{{ postgresql_data_dir }}"
+
+    - name: configure write ahead log for streaming
+      lineinfile:
+        dest: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "^#wal_level"
+        backrefs: yes
+        line: "wal_level = hot_standby\t\t\t# minimal, archive, or hot_standby"
+      notify: restart postgresql
+
+    - name: turn on hot standby
+      lineinfile:
+        dest: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "^#hot_standby ="
+        backrefs: yes
+        line: "hot_standby = on\t\t\t# \"on\" allows queries during recovery"
+      notify: restart postgresql
+
+    - name: configure write ahead log senders
+      lineinfile:
+        dest: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "^#max_wal_senders"
+        backrefs: yes
+        line: "max_wal_senders = 3\t\t# max number of walsender processes"
+      notify: restart postgresql
+
+    - name: configure checkpoint segments
+      lineinfile:
+        dest: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "^#checkpoint_segments"
+        backrefs: yes
+        line: "checkpoint_segments = 8\t\t\t# logfile segments, min 1, 16MB each"
+      notify: restart postgresql
+
+    - name: configure write ahead log keep segments
+      lineinfile:
+        dest: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "^#wal_keep_segments"
+        backrefs: yes
+        line: "wal_keep_segments = 8\t\t# in logfile segments, 16MB each; 0 disables"
+      notify: restart postgresql    
+  when: inventory_hostname in groups.postgresql_replica
+  become: true

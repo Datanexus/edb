@@ -1,0 +1,10 @@
+# (c) 2016 DataNexus Inc.  All Rights Reserved.
+#
+# test file for streaming data
+# AWS_PROFILE=datanexus ansible-playbook -e "project=demo application=postgresql domain=development  host_inventory=tag_Application_{{ application }} ansible_user=centos" site.yml
+---
+- hosts: "{{ host_inventory }}:&tag_Role_master"
+  tasks:
+    - command: "/usr/bin/psql -c 'create table t_random as select s, md5(random()::text) from generate_Series(1,500) s;'"
+      become: yes
+      become_user: postgres
