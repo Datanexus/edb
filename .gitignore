@@ -1,0 +1,6 @@
+# ignore all private keys
+*.pem
+ansible.log
+.DS_Store
+*.retry
+.python-version
