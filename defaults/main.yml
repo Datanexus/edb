@@ -1,22 +1,19 @@
 ---
-# RHEL/CentOS only. Set a repository to use for PostgreSQL installation.
-postgresql_enablerepo: ""
-
-postgresql_user: postgres
-postgresql_group: postgres
+postgresql_user: enterprisedb
+postgresql_group: enterprisedb
 
 postgresql_unix_socket_directories:
-  - /var/run/postgresql
+  - /var/run/edb/as{{ postgresql_major_version }}.{{ postgresql_minor_version }}
 
 # Global configuration options that will be set in postgresql.conf.
 postgresql_global_config_options:
   - option: unix_socket_directories
     value: '{{ postgresql_unix_socket_directories | join(",") }}'
-
-# Debian only. Used to generate the locales used by PostgreSQL databases.
-postgresql_locales:
-  - 'en_US.UTF-8'
-
+  - option: log_destination
+    value: 'syslog'
+  - option: log_truncate_on_rotation
+    value: 'on'
+    
 # Databases to ensure exist.
 postgresql_databases: []
   # - name: exampledb # required; the rest are optional

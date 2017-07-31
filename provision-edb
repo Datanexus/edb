@@ -28,7 +28,7 @@
   hosts: shaw
   gather_facts: yes
   tasks:
-    - name: fetching kafka broker keystore
+    - name: fetching CA broker keystore
       fetch:
         src: "/etc/tls/datanexus/ca/{{ item }}"
         dest: "{{ key_path}}/{{ item }}"
@@ -39,10 +39,10 @@
       become: true
       
 # do the auto discovery first as we use all the nodes for master/replica configuration
-- name: discovering all postgresql nodes
+- name: discovering all edb nodes
   hosts: localhost
   vars_files:
-      - vars/postgresql.yml
+      - vars/edb.yml
   tasks:
     - ec2_remote_facts:
         region: "{{ ec2_region }}"
@@ -52,21 +52,21 @@
           "tag:Domain": "{{ domain }}"
           "tag:Project": "{{ project }}"
           "tag:Tenant": "{{ tenant }}"
-      register: postgresql_instances
+      register: edb_instances
       when:
         - cloud == 'aws'
       
     - name: building {{ application }} host group
       add_host: hostname="{{ item }}" groupname="{{ application }}" ansible_ssh_private_key_file="{{ key_path }}/{{ cloud }}-{{ ec2_region }}-{{ project }}-{{ application }}-{{ domain }}-private-key.pem"
-      with_items: "{{ postgresql_instances.instances|map(attribute='private_ip_address')|list }}"
+      with_items: "{{ edb_instances.instances|map(attribute='private_ip_address')|list }}"
       when:
         - cloud == 'aws'
-        - postgresql_instances.instances|length > 0
+        - edb_instances.instances|length > 0
 
-- name: discovering all postgresql_master nodes
+- name: discovering all edb_master nodes
   hosts: localhost
   vars_files:
-      - vars/postgresql.yml
+      - vars/edb.yml
   tasks:
     - ec2_remote_facts:
         region: "{{ ec2_region }}"
@@ -88,10 +88,10 @@
         - cloud == 'aws'
         - postgresql_master_instances.instances|length > 0
 
-- name: discovering all postgresql_replica nodes
+- name: discovering all edb_replica nodes
   hosts: localhost
   vars_files:
-      - vars/postgresql.yml
+      - vars/edb.yml
   tasks:    
     - ec2_remote_facts:
         region: "{{ ec2_region }}"
@@ -111,43 +111,43 @@
       with_items: "{{ postgresql_replica_instances.instances|map(attribute='private_ip_address')|list }}"
       when:
         - cloud == 'aws'
-        - postgresql_instances.instances|length > 0
+        - edb_instances.instances|length > 0
       
 - name: install base configuration for {{ application }}
-  hosts: postgresql
+  hosts: edb
   vars_files:
-      - vars/postgresql.yml
+      - vars/edb.yml
       - "{{ tenant_config_path }}/config/site.yml"
   gather_facts: yes
   roles:
-    - { role: install-packages, package_list: ['https://download.postgresql.org/pub/repos/yum/{{ postgresql_major_version }}.{{ postgresql_minor_version }}/redhat/rhel-7-x86_64/pgdg-{{ ansible_distribution|lower }}{{ postgresql_major_version }}{{ postgresql_minor_version }}-{{ postgresql_major_version }}.{{ postgresql_minor_version }}-3.noarch.rpm'] }
-    - { role: install-packages, package_list: ['epel-release-7-9'], when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat' }
+    - { role: configure-repo, when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat'  }
+    - { role: install-packages, package_list: ['{{ application }}-as{{ postgresql_major_version }}{{ postgresql_minor_version }}-server-{{ postgresql_major_version }}.{{ postgresql_minor_version }}.{{ postgresql_rev_version }}.rhel7'], when: ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat'  }
     - { role: install-packages, package_list: "{{ postgresql_package_list }}" }
-    - { role: postgresql }
+    - { role: edb }
 
-- hosts: postgresql_master
-  gather_facts: no
-  vars_files:
-    - vars/postgresql.yml
-  roles:
-    - { role: master-streaming }
-    
-- hosts: postgresql_replica
-  gather_facts: no
-  vars_files:
-    - vars/postgresql.yml
-  roles:
-    - { role: replica-streaming }
+# - hosts: postgresql_master
+#   gather_facts: no
+#   vars_files:
+#     - vars/edb.yml
+#   roles:
+#     - { role: master-streaming }
+#
+# - hosts: postgresql_replica
+#   gather_facts: no
+#   vars_files:
+#     - vars/edb.yml
+#   roles:
+#     - { role: replica-streaming }
 
 ### random leftover stuff
 
 
 #     - name: list all instances
 #       debug: msg=item
-# #      with_items: "{{ postgresql_instances.instances|selectattr('state', 'equalto', 'running')|map(attribute='private_ip_address')|list }}"
-#       with_items: "{{ postgresql_instances.instances|map(attribute='private_ip_address')|list }}"
+# #      with_items: "{{ edb_instances.instances|selectattr('state', 'equalto', 'running')|map(attribute='private_ip_address')|list }}"
+#       with_items: "{{ edb_instances.instances|map(attribute='private_ip_address')|list }}"
 #       when:
-#         - postgresql_instances.instances|length > 0
+#         - edb_instances.instances|length > 0
  
     # - name: list master instances
     #   debug: msg=item
