@@ -1,0 +1,20 @@
+# (c) 2016 DataNexus Inc.  All Rights Reserved.
+---
+application: edb
+postgresql_major_version: 9
+postgresql_minor_version: 6
+postgresql_rev_version: '3.8-2'
+edb_version: 4
+
+postgresql_version: "{{ postgresql_major_version }}.{{ postgresql_minor_version }}-{{ postgresql_rev_version }}"
+edb_yum: "{{ postgresql_major_version }}.{{ postgresql_minor_version }}-{{ edb_version }}"
+postgresql_bin_path: "/usr/edb/as{{ postgresql_major_version }}.{{ postgresql_minor_version }}/bin"
+postgresql_daemon: "edb-as-{{ postgresql_major_version }}.{{ postgresql_minor_version }}"
+postgresql_home_dir: "/var/lib/edb"
+postgresql_data_dir: "/data/edb"
+postgresql_config_path: "{{ postgresql_data_dir }}"
+
+python_postgres_adapter_version: "2.5.1-3"
+postgresql_rpm_info: "PGDG.rhel7"
+postgresql_package_list:
+  - "python-psycopg2-{{ python_postgres_adapter_version }}.el7"
