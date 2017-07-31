@@ -12,7 +12,7 @@
       dest: "{{ postgresql_config_path }}/pg_hba.conf"
       line: "hostssl  replication     replicator      {{ hostvars[item].ansible_eth1.ipv4.address }}/32          cert clientcert=1"
     become: true
-    with_items: "{{ groups.postgresql_replica }}"
+    with_items: "{{ groups.edb_replica }}"
     notify: restart postgresql  
      
   - name: adding replication user
@@ -21,12 +21,12 @@
       password: "{{ item.password | default(omit) }}"
       priv: "{{ item.priv | default(omit) }}"
       role_attr_flags: "{{ item.role_attr_flags | default(omit) }}"
-      db: "{{ item.db | default(omit) }}"
+      db: "{{ item.db | default('edb') }}"
       login_host: "{{ item.login_host | default('localhost') }}"
       login_password: "{{ item.login_password | default(omit) }}"
       login_user: "{{ item.login_user | default(postgresql_user) }}"
       login_unix_socket: "{{ item.login_unix_socket | default(postgresql_unix_socket_directories[0]) }}"
-      port: "{{ item.port | default(omit) }}"
+      port: "{{ item.port | default('5444') }}"
       state: "{{ item.state | default('present') }}"
     with_items: "{{ replication_users  }}"
     no_log: true
@@ -41,7 +41,7 @@
     notify: restart postgresql
 
   # max_wal_senders should be four times the total number of replicas 
-  - set_fact: wal_senders={{ groups['postgresql_replica'] | length * 4 }}  
+  - set_fact: wal_senders={{ groups['edb_replica'] | length * 4 }}  
   
   - name: configure write ahead log senders
     lineinfile:
@@ -66,5 +66,5 @@
       backrefs: yes
       line: "wal_keep_segments = 8\t\t# in logfile segments, 16MB each; 0 disables"
     notify: restart postgresql
-  when: inventory_hostname in groups.postgresql_master
+  when: inventory_hostname in groups.edb_master
   become: true

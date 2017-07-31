@@ -125,19 +125,19 @@
     - { role: install-packages, package_list: "{{ postgresql_package_list }}" }
     - { role: edb }
 
-# - hosts: postgresql_master
-#   gather_facts: no
-#   vars_files:
-#     - vars/edb.yml
-#   roles:
-#     - { role: master-streaming }
-#
-# - hosts: postgresql_replica
-#   gather_facts: no
-#   vars_files:
-#     - vars/edb.yml
-#   roles:
-#     - { role: replica-streaming }
+- hosts: edb_master
+  gather_facts: no
+  vars_files:
+    - vars/edb.yml
+  roles:
+    - { role: master-streaming }
+
+- hosts: edb_replica
+  gather_facts: no
+  vars_files:
+    - vars/edb.yml
+  roles:
+    - { role: replica-streaming }
 
 ### random leftover stuff
 

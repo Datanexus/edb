@@ -2,9 +2,9 @@
 #
 # streaming roles and tasks for the master
 ---
-postgresql_user: postgres
+postgresql_user: enterprisedb
 postgresql_unix_socket_directories:
-  - /var/run/postgresql
+  - /var/run/edb/as{{ postgresql_major_version }}.{{ postgresql_minor_version }}
 
 # add replicator user by default
 replication_users:
