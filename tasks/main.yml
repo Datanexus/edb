@@ -31,53 +31,53 @@
     command: "{{ postgresql_bin_path }}/edb-as-{{ postgresql_major_version }}{{ postgresql_minor_version }}-setup initdb"
     when: not pgdata_dir_version.stat.exists
   
-  # - name: distributing CA certificates to all cluster nodes
- #    copy:
- #      src:  "{{ key_path }}/{{ item }}"
- #      dest: "{{ postgresql_data_dir }}"
- #      owner: "{{ postgresql_user }}"
- #      group: "{{ postgresql_user }}"
- #      mode: 0600
- #    with_items:
- #      - ca-cert.pem
- #      - ca-key.pem
-        
-  # - name: check if certs are present
- #    stat:
- #      path: "{{ postgresql_data_dir}}/ca-key.key"
- #    register: pgdata_server_key
- #
- #  - name: turn on SSL
- #    lineinfile:
- #      dest: "{{ postgresql_config_path }}/postgresql.conf"
- #      regexp: "^#ssl = off"
- #      backrefs: yes
- #      line: "ssl = on\t\t\t\t# (change requires restart)"
- #
- #  - name: configuring postgresql SSL cert file
- #    lineinfile:
- #      dest: "{{ postgresql_config_path }}/postgresql.conf"
- #      regexp: "^#ssl_cert_file ="
- #      backrefs: yes
- #      line: "ssl_cert_file = 'ca-cert.pem'\t\t# (change requires restart)"
- #    become: true
- #
- #  - name: configuring postgresql SSL key file
- #    lineinfile:
- #      dest: "{{ postgresql_config_path }}/postgresql.conf"
- #      regexp: "^#ssl_key_file ="
- #      backrefs: yes
- #      line: "ssl_key_file = 'ca-key.pem'\t\t# (change requires restart)"
- #    become: true
- #
- #  - name: configure CA root certificate
- #    lineinfile:
- #      dest: "{{ postgresql_config_path }}/postgresql.conf"
- #      regexp: "^#ssl_ca_file ="
- #      backrefs: yes
- #      line: "ssl_ca_file = 'ca-cert.pem'\t\t# (change requires restart)"
- #    become: true
- #    notify: restart postgresql
+  - name: distributing CA certificates to all cluster nodes
+    copy:
+      src:  "{{ key_path }}/{{ item }}"
+      dest: "{{ postgresql_data_dir }}"
+      owner: "{{ postgresql_user }}"
+      group: "{{ postgresql_user }}"
+      mode: 0600
+    with_items:
+      - ca-cert.pem
+      - ca-key.pem
+
+  - name: check if certs are present
+    stat:
+      path: "{{ postgresql_data_dir}}/ca-key.key"
+    register: pgdata_server_key
+
+  - name: turn on SSL
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/postgresql.conf"
+      regexp: "^#ssl = off"
+      backrefs: yes
+      line: "ssl = on\t\t\t\t# (change requires restart)"
+
+  - name: configuring postgresql SSL cert file
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/postgresql.conf"
+      regexp: "^#ssl_cert_file ="
+      backrefs: yes
+      line: "ssl_cert_file = 'ca-cert.pem'\t\t# (change requires restart)"
+    become: true
+
+  - name: configuring postgresql SSL key file
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/postgresql.conf"
+      regexp: "^#ssl_key_file ="
+      backrefs: yes
+      line: "ssl_key_file = 'ca-key.pem'\t\t# (change requires restart)"
+    become: true
+
+  - name: configure CA root certificate
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/postgresql.conf"
+      regexp: "^#ssl_ca_file ="
+      backrefs: yes
+      line: "ssl_ca_file = 'ca-cert.pem'\t\t# (change requires restart)"
+    become: true
+    notify: restart postgresql
 
     
   - name: listen on {{ postgresql_interface_ipv4 }}
@@ -89,21 +89,21 @@
     with_items: "{{ postgresql_interface_ipv4 }}"
     notify: restart postgresql        
 
-  # - name: set
-  #   lineinfile:
-  #     dest: "{{ postgresql_config_path }}/pg_hba.conf"
-  #     regexp: "^host    all             all             127.0.0.1/32            ident"
-  #     backrefs: yes
-  #     line: "hostssl all             all             {{ postgresql_broadcast_interface_ipv4 }}/24            cert clientcert=1"
-  #   notify: restart postgresql
-  
-  # - name: Set trusted listener on data network
-  #   lineinfile:
-  #     dest: "{{ postgresql_config_path }}/pg_hba.conf"
-  #     regexp: "^host    all             all             127.0.0.1/32            ident"
-  #     backrefs: yes
-  #     line: "hostssl all             all             {{ postgresql_broadcast_interface_ipv4 }}/24            cert clientcert=1"
-  #   notify: restart postgresql
+  - name: set
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/pg_hba.conf"
+      regexp: "^host    all             all             127.0.0.1/32            ident"
+      backrefs: yes
+      line: "hostssl all             all             {{ postgresql_broadcast_interface_ipv4 }}/24            cert clientcert=1"
+    notify: restart postgresql
+
+  - name: Set trusted listener on data network
+    lineinfile:
+      dest: "{{ postgresql_config_path }}/pg_hba.conf"
+      regexp: "^host    all             all             127.0.0.1/32            ident"
+      backrefs: yes
+      line: "hostssl all             all             {{ postgresql_broadcast_interface_ipv4 }}/24            cert clientcert=1"
+    notify: restart postgresql
       
   - name: Configure global settings.
     lineinfile:
@@ -170,6 +170,6 @@
       port: "{{ item.port | default('5444') }}"
       state: "{{ item.state | default('present') }}"
     with_items: "{{ postgresql_users  }}"
-#    no_log: true
+    no_log: true
     become_user: "{{ postgresql_user }}"
   become: true

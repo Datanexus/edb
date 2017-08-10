@@ -54,11 +54,11 @@
       become_user: "{{ postgresql_user }}"
 
     - name: restoring CA key
-      command: /bin/mv /tmp/ca-key.pem /var/lib/pgsql/ca-key.pem
+      command: /bin/mv /tmp/ca-key.pem /var/lib/edb/ca-key.pem
       become_user: "{{ postgresql_user }}"
         
     - name: sign replica key
-      command: /bin/openssl x509 -req -in {{ postgresql_home_dir }}/postgresql.csr -CA "{{ postgresql_home_dir }}/.postgresql/ca-cert.pem" -CAkey /var/lib/pgsql/ca-key.pem -out {{ postgresql_home_dir }}/.postgresql/postgresql.crt -CAcreateserial
+      command: /bin/openssl x509 -req -in {{ postgresql_home_dir }}/postgresql.csr -CA "{{ postgresql_home_dir }}/.postgresql/ca-cert.pem" -CAkey /var/lib/edb/ca-key.pem -out {{ postgresql_home_dir }}/.postgresql/postgresql.crt -CAcreateserial
       become_user: "{{ postgresql_user }}"
 
     - name: ensure replica key permissions
@@ -69,15 +69,15 @@
         mode: 0600
       
     - name: copy initial database
-      command: /bin/pg_basebackup -h {{ hostvars[item].ansible_eth1.ipv4.address }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
+      command: /usr/edb/as{{ postgresql_major_version }}.{{ postgresql_minor_version }}/bin/pg_basebackup -h {{ hostvars[item].ansible_eth1.ipv4.address }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
       become_user: "{{ postgresql_user }}"
-      with_items: "{{ groups.postgresql_master }}"
+      with_items: "{{ groups.edb_master }}"
       when: cloud == "aws"
       
     - name: copy initial database
-      command: /bin/pg_basebackup -h {{ hostvars[item].osp_floating_ip }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
+      command: /usr/edb/as{{ postgresql_major_version }}.{{ postgresql_minor_version }}/bin/pg_basebackup -h {{ hostvars[item].osp_floating_ip }} -D {{ postgresql_data_dir }} -U replicator -v -P --xlog-method=stream
       become_user: "{{ postgresql_user }}"
-      with_items: "{{ groups.postgresql_master }}"  
+      with_items: "{{ groups.edb_master }}"  
       when: cloud == "osp"
       
     - name: Restore postgresql.conf
@@ -91,10 +91,10 @@
         create: yes
         block: |
           standby_mode = 'on'
-          primary_conninfo = 'host={{ hostvars[item].ansible_eth1.ipv4.address }} port=5432 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
+          primary_conninfo = 'host={{ hostvars[item].ansible_eth1.ipv4.address }} port=5444 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
           trigger_file = '/tmp/postgresql.trigger'
       become_user: "{{ postgresql_user }}"
-      with_items: "{{ groups.postgresql_master }}"
+      with_items: "{{ groups.edb_master }}"
       when: cloud == "aws"
       
     - name: build recovery file
@@ -104,10 +104,10 @@
         create: yes
         block: |
           standby_mode = 'on'
-          primary_conninfo = 'host={{ hostvars[item].osp_floating_ip }} port=5432 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
+          primary_conninfo = 'host={{ hostvars[item].osp_floating_ip }} port=5444 user=replicator sslmode=require sslcert={{ postgresql_home_dir }}/.postgresql/postgresql.crt sslkey={{ postgresql_home_dir }}/.postgresql/postgresql.key'
           trigger_file = '/tmp/postgresql.trigger'
       become_user: "{{ postgresql_user }}"
-      with_items: "{{ groups.postgresql_master }}"
+      with_items: "{{ groups.edb_master }}"
       when: cloud == "osp"
       
     - name: Fix SE Linux labels on {{ postgresql_data_dir }}
@@ -152,5 +152,5 @@
         backrefs: yes
         line: "wal_keep_segments = 8\t\t# in logfile segments, 16MB each; 0 disables"
       notify: restart postgresql    
-  when: inventory_hostname in groups.postgresql_replica
+  when: inventory_hostname in groups.edb_replica
   become: true

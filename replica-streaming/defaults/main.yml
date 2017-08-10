@@ -2,6 +2,6 @@
 #
 # default variables for the replica
 ---
-postgresql_user: postgres
-postgresql_group: postgres
-postgresql_data_dir: "/data/pgsql"
+postgresql_user: enterprisedb
+postgresql_group: enterprisedb
+postgresql_data_dir: "/data/edb"
